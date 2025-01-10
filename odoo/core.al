@@ -3,6 +3,7 @@
  {:clj-import
   (quote
    [(:require [necessary-evil.core :as xml-rpc]
+              [agentlang.global-state :as gs]
               [agentlang.component :as cn]
               [agentlang.connections.client :as cc]
               [agentlang.util.logger :as log]
@@ -10,14 +11,22 @@
               [agentlang.resolver.core :as rc]
               [agentlang.lang.internal :as li])])})
 
-(def odoo-enabed? (System/getenv "ODOO_USER"))
+(entity
+ :ConnectionConfig
+ {:apiurl :String
+  :db :String
+  :username :String
+  :password :String})
+
+(defn odoo-enabed? []
+  (:odoo-enabled? (gs/get-app-config)))
 
 ;; Ref: https://gist.github.com/zerg000000/9ca413b7481426c2dedde38cb1f51246
 (defn authenticate
   "Attempt acquire uid if it is not already exists in `conn`"
   [conn]
   (if-not (contains? conn :uid)
-    (assoc conn :uid (xml-rpc/call (str (:api-url conn) "/xmlrpc/2/common")
+    (assoc conn :uid (xml-rpc/call (str (:apiurl conn) "/xmlrpc/2/common")
                                    "authenticate" (:db conn) (:username conn) (:password conn) {}))
     conn))
 
@@ -29,14 +38,14 @@
   [conn domain & {:keys [allfields attributes]
                   :or {allfields []
                        attributes []}}]
-  (xml-rpc/call (str (:api-url conn) "/xmlrpc/2/object") "execute_kw"
+  (xml-rpc/call (str (:apiurl conn) "/xmlrpc/2/object") "execute_kw"
                 (:db conn) (:uid conn) (:password conn)
                 domain "fields_get" allfields attributes))
 
 (defn read-object
   "Read the requested fields for the records in self, and return their values as a list of dicts."
   [conn domain ids fields]
-  (xml-rpc/call (str (:api-url conn) "/xmlrpc/2/object") "execute_kw"
+  (xml-rpc/call (str (:apiurl conn) "/xmlrpc/2/object") "execute_kw"
                 (:db conn) (:uid conn) (:password conn)
                 domain "read" (if (vector? ids) ids [ids]) fields))
 
@@ -45,7 +54,7 @@
    https://www.odoo.com/documentation/saas-17.2/developer/reference/backend/orm.html#odoo.models.Model.search   
    Also see. https://www.odoo.com/documentation/saas-17.2/developer/reference/backend/orm.html#search-domains"
   [conn domain search-domains {:keys [limit offset order] :as args}]
-  (xml-rpc/call (str (:api-url conn) "/xmlrpc/2/object") "execute_kw"
+  (xml-rpc/call (str (:apiurl conn) "/xmlrpc/2/object") "execute_kw"
                 (:db conn) (:uid conn) (:password conn)
                 domain "search"
                 search-domains
@@ -55,7 +64,7 @@
   "Returns the number of records in the current model matching the provided domain.   
    https://www.odoo.com/documentation/saas-17.2/developer/reference/backend/orm.html#odoo.models.Model.search_fetch"
   [conn domain search-domains {:keys [limit] :as args}]
-  (xml-rpc/call (str (:api-url conn) "/xmlrpc/2/object") "execute_kw"
+  (xml-rpc/call (str (:apiurl conn) "/xmlrpc/2/object") "execute_kw"
                 (:db conn) (:uid conn) (:password conn)
                 domain "search_count"
                 search-domains
@@ -67,7 +76,7 @@
    of methods search() and fetch(), but it performs both tasks with a minimal number of SQL queries.   
    https://www.odoo.com/documentation/saas-17.2/developer/reference/backend/orm.html#odoo.models.Model.search_fetch"
   [conn domain search-domains {:keys [limit offset order] :as args}]
-  (xml-rpc/call (str (:api-url conn) "/xmlrpc/2/object") "execute_kw"
+  (xml-rpc/call (str (:apiurl conn) "/xmlrpc/2/object") "execute_kw"
                 (:db conn) (:uid conn) (:password conn)
                 domain "search_read"
                 search-domains
@@ -78,7 +87,7 @@
    The new records are initialized using the values from the list of dicts vals_list, and if necessary those from default_get().   
    https://www.odoo.com/documentation/saas-17.2/developer/reference/backend/orm.html#odoo.models.Model.create"
   [conn domain xs]
-  (xml-rpc/call (str (:api-url conn) "/xmlrpc/2/object") "execute_kw"
+  (xml-rpc/call (str (:apiurl conn) "/xmlrpc/2/object") "execute_kw"
                 (:db conn) (:uid conn) (:password conn)
                 domain "create"
                 xs))
@@ -86,15 +95,15 @@
 (defn write
   "Updates all records in self with the provided values."
   [conn domain ids record]
-  (xml-rpc/call (str (:api-url conn) "/xmlrpc/2/object") "execute_kw"
+  (xml-rpc/call (str (:apiurl conn) "/xmlrpc/2/object") "execute_kw"
                 (:db conn) (:uid conn) (:password conn)
                 domain "write"
                 [ids record]))
 
 (defn get-connection-config []
-  (or (cc/get-connection :ErpSuite/Odoo)
+  (or (cc/get-connection :Odoo/Connection)
       {:Parameter
-       {:api-url (or (System/getenv "ODOO_HOST") "http://localhost:8069/")
+       {:apiurl (or (System/getenv "ODOO_HOST") "http://localhost:8069/")
         :db (or (System/getenv "ODOO_DB") "odoo")
         :username (System/getenv "ODOO_USER")
         :password (System/getenv "ODOO_PASSWORD")}}))
@@ -102,10 +111,11 @@
 (def ^:private get-connection
   (memoize
    (fn []
-     (when odoo-enabed?
+     (when (odoo-enabed?)
        (let [params (cc/connection-parameter (get-connection-config))
+             _ (println ">>>>> " params)
              conn (authenticate params)
-             info (xml-rpc/call (str (:api-url conn) "/xmlrpc/2/common") "version")]
+             info (xml-rpc/call (str (:apiurl conn) "/xmlrpc/2/common") "version")]
          (if (and (map? info) (:server_version info))
            (do (log/info (str "Odoo connection established. " info))
                conn)
@@ -160,7 +170,7 @@
   instance)
 
 (defn register-resolver [paths norm-fns]
-  (when odoo-enabed?
+  (when (odoo-enabed?)
     (let [methods {:query (partial query-instances norm-fns)
                    :update update-instance}
           res (rc/make-resolver :Odoo.Core/Resolver methods)]
