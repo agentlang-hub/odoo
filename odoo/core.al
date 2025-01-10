@@ -22,19 +22,19 @@
   (:odoo-enabled? (gs/get-app-config)))
 
 ;; Ref: https://gist.github.com/zerg000000/9ca413b7481426c2dedde38cb1f51246
+;; ttempt acquire uid if it is not already exists in `conn`
 (defn authenticate
-  "Attempt acquire uid if it is not already exists in `conn`"
   [conn]
   (if-not (contains? conn :uid)
     (assoc conn :uid (xml-rpc/call (str (:apiurl conn) "/xmlrpc/2/common")
                                    "authenticate" (:db conn) (:username conn) (:password conn) {}))
     conn))
 
+;; Return the definition of each field.
+;; The returned value is a dictionary (indexed by field name) of dictionaries.
+;; The _inherits’d fields are included. The string, help, and selection (if present) attributes are translated.
+;; https://www.odoo.com/documentation/saas-17.2/developer/reference/backend/orm.html#id7
 (defn fields
-  "Return the definition of each field.
-   The returned value is a dictionary (indexed by field name) of dictionaries.
-   The _inherits’d fields are included. The string, help, and selection (if present) attributes are translated.   
-   https://www.odoo.com/documentation/saas-17.2/developer/reference/backend/orm.html#id7"
   [conn domain & {:keys [allfields attributes]
                   :or {allfields []
                        attributes []}}]
@@ -42,17 +42,17 @@
                 (:db conn) (:uid conn) (:password conn)
                 domain "fields_get" allfields attributes))
 
+;; Read the requested fields for the records in self, and return their values as a list of dicts.
 (defn read-object
-  "Read the requested fields for the records in self, and return their values as a list of dicts."
   [conn domain ids fields]
   (xml-rpc/call (str (:apiurl conn) "/xmlrpc/2/object") "execute_kw"
                 (:db conn) (:uid conn) (:password conn)
                 domain "read" (if (vector? ids) ids [ids]) fields))
 
+;; Search for the records that satisfy the given domain search domain.
+;; https://www.odoo.com/documentation/saas-17.2/developer/reference/backend/orm.html#odoo.models.Model.search
+;; Also see. https://www.odoo.com/documentation/saas-17.2/developer/reference/backend/orm.html#search-domains
 (defn search
-  "Search for the records that satisfy the given domain search domain.   
-   https://www.odoo.com/documentation/saas-17.2/developer/reference/backend/orm.html#odoo.models.Model.search   
-   Also see. https://www.odoo.com/documentation/saas-17.2/developer/reference/backend/orm.html#search-domains"
   [conn domain search-domains {:keys [limit offset order] :as args}]
   (xml-rpc/call (str (:apiurl conn) "/xmlrpc/2/object") "execute_kw"
                 (:db conn) (:uid conn) (:password conn)
@@ -60,9 +60,9 @@
                 search-domains
                 args))
 
+;; Returns the number of records in the current model matching the provided domain.
+;; https://www.odoo.com/documentation/saas-17.2/developer/reference/backend/orm.html#odoo.models.Model.search_fetch
 (defn search-count
-  "Returns the number of records in the current model matching the provided domain.   
-   https://www.odoo.com/documentation/saas-17.2/developer/reference/backend/orm.html#odoo.models.Model.search_fetch"
   [conn domain search-domains {:keys [limit] :as args}]
   (xml-rpc/call (str (:apiurl conn) "/xmlrpc/2/object") "execute_kw"
                 (:db conn) (:uid conn) (:password conn)
@@ -70,11 +70,11 @@
                 search-domains
                 args))
 
+;; Search for the records that satisfy the given domain search domain,
+;; and fetch the given fields to the cache. This method is like a combination
+;; of methods search() and fetch(), but it performs both tasks with a minimal number of SQL queries.
+;; https://www.odoo.com/documentation/saas-17.2/developer/reference/backend/orm.html#odoo.models.Model.search_fetch
 (defn search-read
-  "Search for the records that satisfy the given domain search domain,
-   and fetch the given fields to the cache. This method is like a combination
-   of methods search() and fetch(), but it performs both tasks with a minimal number of SQL queries.   
-   https://www.odoo.com/documentation/saas-17.2/developer/reference/backend/orm.html#odoo.models.Model.search_fetch"
   [conn domain search-domains {:keys [limit offset order] :as args}]
   (xml-rpc/call (str (:apiurl conn) "/xmlrpc/2/object") "execute_kw"
                 (:db conn) (:uid conn) (:password conn)
@@ -82,18 +82,18 @@
                 search-domains
                 args))
 
+;; Creates new records for the model.
+;; The new records are initialized using the values from the list of dicts vals_list, and if necessary those from default_get().
+;; https://www.odoo.com/documentation/saas-17.2/developer/reference/backend/orm.html#odoo.models.Model.create
 (defn create
-  "Creates new records for the model.
-   The new records are initialized using the values from the list of dicts vals_list, and if necessary those from default_get().   
-   https://www.odoo.com/documentation/saas-17.2/developer/reference/backend/orm.html#odoo.models.Model.create"
   [conn domain xs]
   (xml-rpc/call (str (:apiurl conn) "/xmlrpc/2/object") "execute_kw"
                 (:db conn) (:uid conn) (:password conn)
                 domain "create"
                 xs))
 
+;; Updates all records in self with the provided values.
 (defn write
-  "Updates all records in self with the provided values."
   [conn domain ids record]
   (xml-rpc/call (str (:apiurl conn) "/xmlrpc/2/object") "execute_kw"
                 (:db conn) (:uid conn) (:password conn)
