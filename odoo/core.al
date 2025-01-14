@@ -18,7 +18,7 @@
   :username :String
   :password :String})
 
-(defn odoo-enabed? []
+(defn odoo-enabled? []
   (:odoo-enabled? (gs/get-app-config)))
 
 ;; Ref: https://gist.github.com/zerg000000/9ca413b7481426c2dedde38cb1f51246
@@ -101,7 +101,7 @@
                 [ids record]))
 
 (defn get-connection-config []
-  (or (cc/get-connection :Odoo/Connection)
+  (or (cc/open-connection :Odoo/Connection)
       {:Parameter
        {:apiurl (or (System/getenv "ODOO_HOST") "http://localhost:8069/")
         :db (or (System/getenv "ODOO_DB") "odoo")
@@ -111,9 +111,8 @@
 (def ^:private get-connection
   (memoize
    (fn []
-     (when (odoo-enabed?)
+     (when (odoo-enabled?)
        (let [params (cc/connection-parameter (get-connection-config))
-             _ (println ">>>>> " params)
              conn (authenticate params)
              info (xml-rpc/call (str (:apiurl conn) "/xmlrpc/2/common") "version")]
          (if (and (map? info) (:server_version info))
@@ -124,19 +123,19 @@
 (defn- lookup-by-ids [conn schema v]
   (when conn
     (let [ids (if (string? v) (read-string v) v)]
-      (read-object conn schema ids []))))
+      (read-object (conn) schema ids []))))
 
 (defn- lookup-by-field [conn schema field field-val]
   (when conn
-    (search-read conn schema [[[field "=" field-val]]] {})))
+    (search-read (conn) schema [[[field "=" field-val]]] {})))
 
 (def ^:private order-lookups
-  (let [conn (get-connection)]
+  (let [conn get-connection]
     {:No (partial lookup-by-ids conn "sale.order")
      :Name (partial lookup-by-field conn "sale.order" "name")}))
 
 (def ^:private invoice-lookups
-  (let [conn (get-connection)]
+  (let [conn get-connection]
     {:No (partial lookup-by-ids conn "account.move")
      :Name (partial lookup-by-field conn "account.move" "name")}))
 
@@ -170,7 +169,7 @@
   instance)
 
 (defn register-resolver [paths norm-fns]
-  (when (odoo-enabed?)
+  (when (odoo-enabled?)
     (let [methods {:query (partial query-instances norm-fns)
                    :update update-instance}
           res (rc/make-resolver :Odoo.Core/Resolver methods)]
