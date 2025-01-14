@@ -101,7 +101,7 @@
                 [ids record]))
 
 (defn get-connection-config []
-  (or (cc/get-connection :Odoo/Connection)
+  (or (cc/open-connection :Odoo/Connection)
       {:Parameter
        {:apiurl (or (System/getenv "ODOO_HOST") "http://localhost:8069/")
         :db (or (System/getenv "ODOO_DB") "odoo")
